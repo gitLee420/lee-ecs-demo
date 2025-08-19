@@ -16,7 +16,7 @@ jobs:
       APP_NAME: lee
       ENV: dev
       ECR_REPO: lee-dev
-      IMAGE_TAG: ${{ github.sha }}
+      IMAGE_TAG: latest
 
     steps:
       - name: Checkout
