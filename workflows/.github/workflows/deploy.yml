@@ -25,7 +25,7 @@ jobs:
       - name: Configure AWS creds (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/github-deploy-lee-dev
+          role-to-assume: arn:aws:iam::182836103705:role/github-deploy-lee-dev
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Get AWS Account ID
