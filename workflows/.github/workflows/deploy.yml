@@ -16,7 +16,7 @@ jobs:
       APP_NAME: lee
       ENV: dev
       ECR_REPO: lee-dev
-      IMAGE_TAG: latest
+      IMAGE_TAG: bootstrap
 
     steps:
       - name: Checkout
