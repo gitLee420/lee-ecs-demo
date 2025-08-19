@@ -44,6 +44,10 @@ jobs:
           docker build -t $IMAGE_URI .
           docker push $IMAGE_URI
 
+      - name: Ensure CloudWatch log group exists
+        run: |
+          aws logs create-log-group --log-group-name "/ecs/${APP_NAME}-${ENV}" || true
+
       - name: Register new Task Definition revision
         run: |
           cat > taskdef.json <<'JSON'
@@ -73,7 +77,7 @@ jobs:
           JSON
           # interpolate env vars
           python - <<'PY'
-import json, os, sys
+import json, os
 with open('taskdef.json') as f:
     data = f.read()
 for k,v in os.environ.items():
@@ -85,4 +89,9 @@ PY
 
       - name: Update Service
         run: |
-          aws ecs update-service             --cluster ${APP_NAME}-${ENV}             --service ${APP_NAME}-${ENV}             --task-definition $TASKDEF_ARN             --desired-count 1             --force-new-deployment
+          aws ecs update-service \
+            --cluster ${APP_NAME}-${ENV} \
+            --service ${APP_NAME}-${ENV} \
+            --task-definition $TASKDEF_ARN \
+            --desired-count 1 \
+            --force-new-deployment
