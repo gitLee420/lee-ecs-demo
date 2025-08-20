@@ -9,7 +9,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write       # for OIDC
+      id-token: write   # for OIDC
       contents: read
     env:
       AWS_REGION: ap-southeast-1
@@ -22,7 +22,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure AWS creds (OIDC)
+      - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::182836103705:role/github-deploy-lee-dev
@@ -31,71 +31,34 @@ jobs:
       - name: Get AWS Account ID
         id: aws
         run: |
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
           echo "ACCOUNT_ID=$ACCOUNT_ID" >> $GITHUB_ENV
 
-      - name: Login to ECR
+      - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build & Push image
+      - name: Build and Push image
         run: |
-          IMAGE_URI=${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}
+          IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}"
           echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
-          docker build -t $IMAGE_URI .
-          docker push $IMAGE_URI
+          docker build -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
 
-      - name: Ensure CloudWatch log group exists
-        run: |
-          aws logs create-log-group --log-group-name "/ecs/${APP_NAME}-${ENV}" || true
+      # Render task definition from template and inject the built image URI
+      - name: Render ECS task definition
+        id: render-taskdef
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ecs-taskdef.json
+          container-name: ${{ env.APP_NAME }}
+          image: ${{ env.IMAGE_URI }}
 
-      - name: Register new Task Definition revision
-        run: |
-          cat > taskdef.json <<'JSON'
-          {
-            "family": "${APP_NAME}-${ENV}",
-            "networkMode": "awsvpc",
-            "requiresCompatibilities": ["FARGATE"],
-            "cpu": "256",
-            "memory": "512",
-            "executionRoleArn": "arn:aws:iam::${ACCOUNT_ID}:role/${APP_NAME}-${ENV}-exec",
-            "taskRoleArn": "arn:aws:iam::${ACCOUNT_ID}:role/${APP_NAME}-${ENV}-task",
-            "containerDefinitions": [{
-              "name": "${APP_NAME}",
-              "image": "${IMAGE_URI}",
-              "portMappings": [{ "containerPort": 80, "protocol": "tcp" }],
-              "logConfiguration": {
-                "logDriver": "awslogs",
-                "options": {
-                  "awslogs-region": "${AWS_REGION}",
-                  "awslogs-group": "/ecs/${APP_NAME}-${ENV}",
-                  "awslogs-stream-prefix": "ecs"
-                }
-              },
-              "essential": true
-            }]
-          }
-          JSON
-
-          # interpolate env vars
-          python - <<'PY'
-import os
-data = open('taskdef.json').read()
-for k, v in os.environ.items():
-    data = data.replace("${"+k+"}", v)
-open('taskdef.json','w').write(data)
-PY
-
-          TASKDEF_ARN=$(aws ecs register-task-definition \
-            --cli-input-json file://taskdef.json \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
-          echo "TASKDEF_ARN=$TASKDEF_ARN" >> $GITHUB_ENV
-
-      - name: Update Service
-        run: |
-          aws ecs update-service \
-            --cluster ${APP_NAME}-${ENV} \
-            --service ${APP_NAME}-${ENV} \
-            --task-definition $TASKDEF_ARN \
-            --desired-count 1 \
-            --force-new-deployment
+      # Deploy the rendered task definition to your cluster/service
+      - name: Deploy to Amazon ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-taskdef.outputs.task-definition }}
+          service: ${{ env.APP_NAME }}-${{ env.ENV }}
+          cluster: ${{ env.APP_NAME }}-${{ env.ENV }}
+          wait-for-service-stability: true
+          force-new-deployment: true
