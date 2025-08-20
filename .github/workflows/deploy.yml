@@ -75,16 +75,20 @@ jobs:
             }]
           }
           JSON
+
           # interpolate env vars
           python - <<'PY'
-import json, os
-with open('taskdef.json') as f:
-    data = f.read()
-for k,v in os.environ.items():
+import os
+data = open('taskdef.json').read()
+for k, v in os.environ.items():
     data = data.replace("${"+k+"}", v)
 open('taskdef.json','w').write(data)
 PY
-          TASKDEF_ARN=$(aws ecs register-task-definition --cli-input-json file://taskdef.json --query 'taskDefinition.taskDefinitionArn' --output text)
+
+          TASKDEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://taskdef.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
           echo "TASKDEF_ARN=$TASKDEF_ARN" >> $GITHUB_ENV
 
       - name: Update Service
