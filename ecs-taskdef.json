@@ -9,7 +9,7 @@
   "containerDefinitions": [
     {
       "name": "lee",
-      "image": "dummy",   // this will get replaced by workflow
+      "image": "dummy",
       "essential": true,
       "portMappings": [
         {
